@@ -13,8 +13,8 @@
  * pipelines GM-to-UB and UB-to-GM transfers. Invalid mask entries, negative
  * indices, and out-of-range indices are skipped without reporting an error.
  *
- * The host wrapper limits blockBytes to 32 KiB and validates that the addressed
- * source and destination extents fit in the kernel's uint32_t offset range.
+ * The host wrapper limits blockBytes to 32 KiB. Byte offsets use uint64_t
+ * so the copy also works with a Host pool larger than 4 GiB.
  * Byte-wise copying keeps the kernel independent of the tensor element type.
  */
 
@@ -59,8 +59,8 @@ public:
         const uint32_t blockNum = AscendC::GetBlockNum();
         this->copyRowsPerCore = (maxCopy + blockNum - 1) / blockNum;
 
-        srcGm.SetGlobalBuffer((__gm__ CopyUnit *)src, srcRows * blockBytes);
-        dstGm.SetGlobalBuffer((__gm__ CopyUnit *)dst, dstRows * blockBytes);
+        srcBase = reinterpret_cast<__gm__ CopyUnit *>(src);
+        dstBase = reinterpret_cast<__gm__ CopyUnit *>(dst);
         srcIndexGm.SetGlobalBuffer((__gm__ int64_t *)src_index, maxCopy);
         dstIndexGm.SetGlobalBuffer((__gm__ int64_t *)dst_index, maxCopy);
         validMaskGm.SetGlobalBuffer((__gm__ uint8_t *)valid_mask, maxCopy);
@@ -92,14 +92,14 @@ public:
             coreEnd = maxCopy;
         }
 
-        uint32_t dstOffsets[BUFFER_NUM] = {0, 0};
+        uint64_t dstOffsets[BUFFER_NUM] = {0, 0};
         uint32_t queueHead = 0;
         uint32_t queueTail = 0;
         uint32_t queued = 0;
 
         for (uint32_t i = coreBegin; i < coreEnd; ++i) {
-            uint32_t srcOffset = 0;
-            uint32_t dstOffset = 0;
+            uint64_t srcOffset = 0;
+            uint64_t dstOffset = 0;
             if (!BuildCopyTask(i, srcOffset, dstOffset)) {
                 continue;
             }
@@ -145,7 +145,7 @@ private:
      * A mapping is accepted only when its validity flag is nonzero and both
      * row indices are non-negative and within their respective row counts.
      */
-    __aicore__ inline bool BuildCopyTask(uint32_t mapIdx, uint32_t &srcOffset, uint32_t &dstOffset)
+    __aicore__ inline bool BuildCopyTask(uint32_t mapIdx, uint64_t &srcOffset, uint64_t &dstOffset)
     {
         if (validMaskGm.GetValue(mapIdx) == 0) {
             return false;
@@ -160,8 +160,8 @@ private:
             return false;
         }
 
-        srcOffset = static_cast<uint32_t>(srcRow) * blockBytes;
-        dstOffset = static_cast<uint32_t>(dstRow) * blockBytes;
+        srcOffset = static_cast<uint64_t>(srcRow) * blockBytes;
+        dstOffset = static_cast<uint64_t>(dstRow) * blockBytes;
         return true;
     }
 
@@ -172,12 +172,14 @@ private:
      * Each queue allocation reserves blockBytes rounded up to a multiple of
      * 32 bytes.
      */
-    __aicore__ inline void CopyIn(uint32_t srcOffset)
+    __aicore__ inline void CopyIn(uint64_t srcOffset)
     {
         AscendC::LocalTensor<CopyUnit> local = copyQue.AllocTensor<CopyUnit>();
         AscendC::DataCopyExtParams copyParams{1, blockBytes, 0, 0, 0};
         AscendC::DataCopyPadExtParams<CopyUnit> padParams{false, 0, 0, 0};
-        AscendC::DataCopyPad(local, srcGm[srcOffset], copyParams, padParams);
+        AscendC::GlobalTensor<CopyUnit> source;
+        source.SetGlobalBuffer(srcBase + srcOffset, blockBytes);
+        AscendC::DataCopyPad(local, source, copyParams, padParams);
         copyQue.EnQue(local);
     }
 
@@ -185,11 +187,13 @@ private:
      * @brief Dequeue one row, copy it from UB to GM, and free its buffer.
      * @param dstOffset Destination byte offset in GM.
      */
-    __aicore__ inline void CopyOut(uint32_t dstOffset)
+    __aicore__ inline void CopyOut(uint64_t dstOffset)
     {
         AscendC::LocalTensor<CopyUnit> local = copyQue.DeQue<CopyUnit>();
         AscendC::DataCopyExtParams copyParams{1, blockBytes, 0, 0, 0};
-        AscendC::DataCopyPad(dstGm[dstOffset], local, copyParams);
+        AscendC::GlobalTensor<CopyUnit> destination;
+        destination.SetGlobalBuffer(dstBase + dstOffset, blockBytes);
+        AscendC::DataCopyPad(destination, local, copyParams);
         copyQue.FreeTensor(local);
     }
 
@@ -197,8 +201,8 @@ private:
     AscendC::TPipe *pipe = nullptr;
     AscendC::TQueBind<AscendC::TPosition::VECIN, AscendC::TPosition::VECOUT, BUFFER_NUM> copyQue;
 
-    AscendC::GlobalTensor<CopyUnit> srcGm;
-    AscendC::GlobalTensor<CopyUnit> dstGm;
+    __gm__ CopyUnit *srcBase = nullptr;
+    __gm__ CopyUnit *dstBase = nullptr;
     AscendC::GlobalTensor<int64_t> srcIndexGm;
     AscendC::GlobalTensor<int64_t> dstIndexGm;
     AscendC::GlobalTensor<uint8_t> validMaskGm;

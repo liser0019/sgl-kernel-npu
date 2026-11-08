@@ -150,6 +150,18 @@ TORCH_LIBRARY_FRAGMENT(npu, m)
         "int attention_mode=2, bool return_softmax_lse=False) "
         "-> (Tensor attention_out, Tensor softmax_max, Tensor softmax_sum)");
 
+#ifdef SGL_KERNEL_ENABLE_SPARSE_KV_IO
+    m.def(
+        "unidex_copy(Tensor src, Tensor(a!) dst, Tensor src_index, "
+        "Tensor dst_index, Tensor valid_mask, int src_rows, int dst_rows, "
+        "int block_bytes, int max_copy, int block_dim=8, "
+        "int? src_ptr=None, int? dst_ptr=None) -> ()");
+
+    m.def("shm_allocator_create_and_register(int size, int device_id, str name) -> (int, int)");
+
+    m.def("shm_allocator_free_all(int device_id) -> ()");
+#endif
+
 #ifdef SGL_KERNEL_ENABLE_A3_ONLY_OPS
     m.def(
         "mla_preprocess(Tensor hiddenState, Tensor gamma0, Tensor beta0, Tensor wdqkv, "
@@ -207,19 +219,9 @@ TORCH_LIBRARY_FRAGMENT(npu, m)
     m.def("triangular_inverse(Tensor x) -> Tensor");
 
     m.def(
-        "unidex_copy(Tensor src, Tensor(a!) dst, Tensor src_index, "
-        "Tensor dst_index, Tensor valid_mask, int src_rows, int dst_rows, "
-        "int block_bytes, int max_copy, int block_dim=8, "
-        "int? src_ptr=None, int? dst_ptr=None) -> ()");
-
-    m.def(
         "slot_map_lookup(Tensor slot_map, Tensor req_indices, Tensor topk_indices, "
         "Tensor(a!) token_on_device, Tensor(b!) device_token_pos, "
         "int block_dim=0) -> ()");
-
-    m.def("shm_allocator_create_and_register(int size, int device_id, str name) -> (int, int)");
-
-    m.def("shm_allocator_free_all(int device_id) -> ()");
 
     m.def(
         "sparse_attn_sharedkv_metadata_host("
@@ -286,7 +288,7 @@ TORCH_LIBRARY_FRAGMENT(npu, m)
 }  // namespace
 
 namespace {
-#ifdef SGL_KERNEL_ENABLE_A3_ONLY_OPS
+#ifdef SGL_KERNEL_ENABLE_SPARSE_KV_IO
 TORCH_LIBRARY_IMPL(npu, CatchAll, m)
 {
     // These control-plane operators have no Tensor arguments, so backend
@@ -390,9 +392,11 @@ TORCH_LIBRARY_IMPL(npu, PrivateUse1, m)
 
     m.impl("sgl_sparse_flash_attention", TORCH_FN(sglang::npu_kernel::sparse_flash_attention));
 
-#ifdef SGL_KERNEL_ENABLE_A3_ONLY_OPS
+#ifdef SGL_KERNEL_ENABLE_SPARSE_KV_IO
     m.impl("unidex_copy", TORCH_FN(sglang::npu_kernel::unidex_copy));
+#endif
 
+#ifdef SGL_KERNEL_ENABLE_A3_ONLY_OPS
     m.impl("slot_map_lookup", TORCH_FN(sglang::npu_kernel::slot_map_lookup));
 #endif
 

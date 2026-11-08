@@ -11,7 +11,9 @@
 #include "shm_allocator.h"
 
 #include <acl/acl.h>
+#ifndef SGL_KERNEL_ARCH_35
 #include <driver/ascend_hal_define.h>
+#endif
 
 #include <cstdlib>
 #include <cstring>
@@ -22,10 +24,12 @@
 
 #include <sys/shm.h>
 
+#ifndef SGL_KERNEL_ARCH_35
 extern "C" {
 drvError_t halHostRegister(void *srcPtr, UINT64 size, UINT32 flag, UINT32 devid, void **dstPtr);
 drvError_t halHostUnregister(void *srcPtr, UINT32 devid);
 }
+#endif
 
 namespace {
 
@@ -78,6 +82,7 @@ ShmAllocatorMode ResolveMode()
     return DetectModeByEnv();
 }
 
+#ifndef SGL_KERNEL_ARCH_35
 uint32_t GetRegisterFlag(ShmAllocatorMode mode)
 {
     if (mode == SHM_ALLOCATOR_MODE_SVM_MAP_DEV) {
@@ -85,12 +90,15 @@ uint32_t GetRegisterFlag(ShmAllocatorMode mode)
     }
     return HOST_MEM_MAP_DEV_PCIE_TH;
 }
+#endif
 
 int EnsureAclDevice(int device_id)
 {
+#ifndef SGL_KERNEL_ARCH_35
     if (g_acl_initialized_devices.find(device_id) != g_acl_initialized_devices.end()) {
         return 0;
     }
+#endif
 
     int32_t current_device = -1;
     aclError ret = aclrtGetDevice(&current_device);
@@ -121,6 +129,10 @@ int EnsureAclDevice(int device_id)
 
 int AllocHostMemory(uint64_t size, void **host_ptr, int *shm_id)
 {
+#ifdef SGL_KERNEL_ARCH_35
+    *shm_id = -1;
+    return aclrtMallocHost(host_ptr, size);
+#else
     int id = shmget(IPC_PRIVATE, size, IPC_CREAT | kShmWriteOwn);
     if (id == -1) {
         return -1;
@@ -144,6 +156,7 @@ int AllocHostMemory(uint64_t size, void **host_ptr, int *shm_id)
     *host_ptr = ptr;
     *shm_id = -1;
     return 0;
+#endif
 }
 
 void FreeHostMemory(const ShmEntry &entry)
@@ -151,12 +164,47 @@ void FreeHostMemory(const ShmEntry &entry)
     if (!entry.owns_host_memory) {
         return;
     }
+#ifdef SGL_KERNEL_ARCH_35
+    (void)aclrtFreeHost(entry.host_ptr);
+#else
     if (entry.host_ptr != nullptr) {
         (void)shmdt(entry.host_ptr);
     }
     if (entry.shm_id >= 0) {
         (void)shmctl(entry.shm_id, IPC_RMID, nullptr);
     }
+#endif
+}
+
+int RegisterHostMapping(void *host_ptr, uint64_t size, int device_id, ShmAllocatorMode mode, void **dev_ptr)
+{
+#ifdef SGL_KERNEL_ARCH_35
+    (void)device_id;  // EnsureAclDevice has already selected the context.
+    (void)mode;
+    const auto status = aclrtHostRegisterV2(host_ptr, size, ACL_HOST_REG_PINNED | ACL_HOST_REG_MAPPED);
+    if (status != ACL_SUCCESS) {
+        return status;
+    }
+    const auto mapping_status = aclrtHostGetDevicePointer(host_ptr, dev_ptr, 0);
+    if (mapping_status != ACL_SUCCESS) {
+        (void)aclrtHostUnregister(host_ptr);
+    }
+    return mapping_status;
+#else
+    return halHostRegister(host_ptr, size, GetRegisterFlag(mode), static_cast<UINT32>(device_id), dev_ptr);
+#endif
+}
+
+int UnregisterHostMapping(void *host_ptr, int device_id)
+{
+#ifdef SGL_KERNEL_ARCH_35
+    if (auto status = EnsureAclDevice(device_id); status != 0) {
+        return status;
+    }
+    return aclrtHostUnregister(host_ptr);
+#else
+    return halHostUnregister(host_ptr, static_cast<UINT32>(device_id));
+#endif
 }
 
 int RegisterHostPtrLocked(const char *name, int device_id, void *host_ptr, uint64_t size, int capacity,
@@ -180,9 +228,13 @@ int RegisterHostPtrLocked(const char *name, int device_id, void *host_ptr, uint6
 
     ShmAllocatorMode mode = ResolveMode();
     void *dev_ptr = nullptr;
-    uint32_t flag = GetRegisterFlag(mode);
-    if (halHostRegister(host_ptr, size, flag, static_cast<UINT32>(device_id), &dev_ptr) != DRV_ERROR_NONE) {
+    const int register_status = RegisterHostMapping(host_ptr, size, device_id, mode, &dev_ptr);
+    if (register_status != 0) {
+#ifdef SGL_KERNEL_ARCH_35
+        return register_status;
+#else
         return -4;
+#endif
     }
 
     if (it != g_entries.end()) {
@@ -244,6 +296,12 @@ int shm_create_and_register(const char *name, int device_id, uint64_t size, int 
                                      existing->second.owns_host_memory, out_dev_ptr);
     }
 
+#ifdef SGL_KERNEL_ARCH_35
+    const int device_status = EnsureAclDevice(device_id);
+    if (device_status != 0) {
+        return device_status;
+    }
+#endif
     void *host_ptr = nullptr;
     int shm_id = -1;
     int ret = AllocHostMemory(size, &host_ptr, &shm_id);
@@ -343,7 +401,7 @@ int shm_free_by_name(const char *name, int device_id)
         return -2;
     }
     if (it->second.is_registered &&
-        halHostUnregister(it->second.host_ptr, static_cast<UINT32>(device_id)) != DRV_ERROR_NONE) {
+        UnregisterHostMapping(it->second.host_ptr, device_id) != 0) {
         return -3;
     }
     FreeHostMemory(it->second);
@@ -354,15 +412,27 @@ int shm_free_by_name(const char *name, int device_id)
 int shm_free_all(int device_id)
 {
     std::lock_guard<std::mutex> lock(g_mu);
-    for (auto &kv : g_entries) {
-        if (kv.second.is_registered) {
-            (void)halHostUnregister(kv.second.host_ptr, static_cast<UINT32>(device_id));
+    int status = 0;
+    for (auto it = g_entries.begin(); it != g_entries.end();) {
+        auto &entry = it->second;
+#ifdef SGL_KERNEL_ARCH_35
+        if (entry.is_registered && entry.device_id != device_id) {
+            ++it;
+            continue;
         }
-        FreeHostMemory(kv.second);
+#endif
+        if (entry.is_registered && UnregisterHostMapping(entry.host_ptr, device_id) != 0) {
+            status = -3;
+            ++it;
+            continue;
+        }
+        FreeHostMemory(entry);
+        it = g_entries.erase(it);
     }
-    g_entries.clear();
-    g_acl_initialized_devices.erase(device_id);
-    return 0;
+    if (status == 0) {
+        g_acl_initialized_devices.erase(device_id);
+    }
+    return status;
 }
 
 }  // extern "C"

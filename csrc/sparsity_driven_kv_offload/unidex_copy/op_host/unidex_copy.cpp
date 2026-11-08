@@ -113,8 +113,6 @@ HOST_API void unidex_copy(const at::Tensor &src, at::Tensor &dst, const at::Tens
 
     const uint64_t srcRequiredBytes = static_cast<uint64_t>(src_rows) * static_cast<uint64_t>(block_bytes);
     const uint64_t dstRequiredBytes = static_cast<uint64_t>(dst_rows) * static_cast<uint64_t>(block_bytes);
-    TORCH_CHECK(srcRequiredBytes <= kUint32Max, "src_rows * block_bytes exceeds the kernel uint32 address range");
-    TORCH_CHECK(dstRequiredBytes <= kUint32Max, "dst_rows * block_bytes exceeds the kernel uint32 address range");
     if (!useRawSrc) {
         const uint64_t srcAvailableBytes =
             static_cast<uint64_t>(src.numel()) * static_cast<uint64_t>(src.element_size());
