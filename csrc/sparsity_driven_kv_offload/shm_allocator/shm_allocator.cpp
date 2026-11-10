@@ -181,7 +181,8 @@ int RegisterHostMapping(void *host_ptr, uint64_t size, int device_id, ShmAllocat
 #ifdef SGL_KERNEL_ARCH_35
     (void)device_id;  // EnsureAclDevice has already selected the context.
     (void)mode;
-    const auto status = aclrtHostRegisterV2(host_ptr, size, ACL_HOST_REG_PINNED | ACL_HOST_REG_MAPPED);
+    // aclrtMallocHost already returns pinned memory; PINNED would register it twice.
+    const auto status = aclrtHostRegisterV2(host_ptr, size, ACL_HOST_REG_MAPPED);
     if (status != ACL_SUCCESS) {
         return status;
     }
