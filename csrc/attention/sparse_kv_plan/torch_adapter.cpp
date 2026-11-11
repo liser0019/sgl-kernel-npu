@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <torch/library.h>
 #include "sparse_kv_runtime.h"
 #include "aclnn_sgl_sparse_kv_plan.h"
 
