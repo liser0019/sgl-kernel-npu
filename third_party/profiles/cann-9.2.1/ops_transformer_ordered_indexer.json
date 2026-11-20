@@ -1,0 +1,16 @@
+{
+  "_comment": "Standalone ordered QLI, with the same device sources as the validated upstream tree. Its vendor is separate from standard QLI.",
+  "name": "sgl_ops_transformer_ordered_indexer",
+  "ops": {
+    "arch35": ["quant_lightning_indexer_ordered"]
+  },
+  "repository": "https://gitcode.com/sparse/ops-transformer.git",
+  "commit": "7b434c429b7b5af85246f12040bb3a79531bfa87",
+  "commands": [
+    ["bash", "build.sh", "--pkg", "--soc={soc}", "--vendor_name={vendor_name}", "--ops={ops}", "-j{jobs}"],
+    ["bash", "build.sh", "--torch_extension", "--ops={ops}", "--vendor_name={vendor_name}"]
+  ],
+  "has_aicpu": false,
+  "license": "LICENSE",
+  "builder": "ops_transformer"
+}

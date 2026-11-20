@@ -23,11 +23,18 @@ from .memfabric.kv_transfer import (
 from .scatter_kpool_tail_updates import scatter_kpool_tail_updates
 from .shm_allocator import create_shm_tensor, free_shm
 from .slot_map_lookup import slot_map_lookup
+from .sparse_kv_plan import (
+    SparseKvPlanState,
+    allocate_sparse_kv_plan_state,
+    sparse_kv_plan,
+)
 from .store_kv_cache_prefix_valid import store_kv_cache_prefix_valid
 from .unidex_copy import unidex_copy_inplace
 
 __all__ = [
     "NPU_KV_QUANT_PATH",
+    "SparseKvPlanState",
+    "allocate_sparse_kv_plan_state",
     "adler32_strided_checksum",
     "alloc_extend",
     "alloc_extend_indices",
@@ -45,6 +52,7 @@ __all__ = [
     "kv_compress_epilog_v2",
     "scatter_kpool_tail_updates",
     "slot_map_lookup",
+    "sparse_kv_plan",
     "store_kv_cache_prefix_valid",
     "transfer_kv_all_layer_kv_split",
     "transfer_kv_all_layer_kv_split_lf_pf",

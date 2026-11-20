@@ -17,6 +17,7 @@ from .qsa_expansion import expand_qsa_blocks
 from .qsa_mqa import qsa_mqa_packed, qsa_mqa_paged
 from .qsa_topk import qsa_topk
 from .quant_lightning_indexer import quant_lightning_indexer
+from .quant_lightning_indexer_ordered import quant_lightning_indexer_ordered
 from .quant_lightning_indexer_dsl import quant_lightning_indexer_dsl
 from .quant_lightning_indexer_metadata import (
     get_quant_lightning_indexer_metadata_size,
@@ -53,6 +54,7 @@ __all__ = [
     "quant_lightning_indexer_metadata",
     "get_quant_lightning_indexer_metadata_size",
     "quant_lightning_indexer",
+    "quant_lightning_indexer_ordered",
     "qsa_mqa_packed",
     "qsa_mqa_paged",
     "qsa_topk",
