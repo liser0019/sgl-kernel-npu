@@ -7,11 +7,10 @@ from ..utils.generation import Generation
 from ..utils.registry import get_impl_by_name, register_impl, register_operator
 
 _OP = "indexer.quant_lightning_indexer_ordered"
-_MAX_TOKENS = (1 << 63) - 1
 
 
 @register_impl(_OP, "auto", supported_generations=[Generation.ARCH35])
-@register_impl(_OP, "ops_transformer", supported_generations=[Generation.ARCH35])
+@register_impl(_OP, "ascendc", supported_generations=[Generation.ARCH35])
 def _ordered_indexer(
     query,
     key,
@@ -24,36 +23,21 @@ def _ordered_indexer(
     topk,
     sparse_mode,
 ):
-    try:
-        from ..._third_party.sgl_ops_transformer_ordered_indexer.ops import (
-            quant_lightning_indexer_ordered as execute,
-        )
-    except ModuleNotFoundError as exc:
-        package = "sgl_kernel_npu._third_party.sgl_ops_transformer_ordered_indexer"
-        if exc.name not in (package, "sgl_kernel_npu._third_party"):
-            raise
+    if not hasattr(torch.ops.npu, "sgl_quant_lightning_indexer_ordered"):
         raise RuntimeError(
-            "Ordered Indexer requires a CANN 9.2.1 wheel built with "
-            "--third-party ops_transformer_ordered_indexer"
-        ) from exc
-
-    return execute(
+            "Ordered Indexer requires a wheel built with --ops quant_lightning_indexer_ordered"
+        )
+    return torch.ops.npu.sgl_quant_lightning_indexer_ordered(
         query,
         key,
         weights,
         q_scale,
         k_scale,
-        actual_seq_lengths_query=query_ends,
-        actual_seq_lengths_key=key_lengths,
-        block_table=block_table,
-        query_quant_mode=0,
-        key_quant_mode=0,
-        layout_query="TND",
-        layout_key="PA_BSND",
-        sparse_count=topk,
-        sparse_mode=sparse_mode,
-        pre_tokens=_MAX_TOKENS,
-        next_tokens=_MAX_TOKENS,
+        query_ends,
+        key_lengths,
+        block_table,
+        topk,
+        sparse_mode,
     )
 
 

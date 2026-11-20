@@ -13,14 +13,9 @@ import sgl_kernel_npu  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
-def require_ordered_vendor():
-    if not any(
-        dependency.get("name") == "sgl_ops_transformer_ordered_indexer"
-        for dependency in getattr(sgl_kernel_npu, "_manifest", {}).get(
-            "third_party", []
-        )
-    ):
-        pytest.skip("wheel was built without the standalone Ordered Indexer vendor")
+def require_ordered_operator():
+    if not hasattr(torch.ops.npu, "sgl_quant_lightning_indexer_ordered"):
+        pytest.skip("wheel was built without the native Ordered Indexer")
 
 
 def generate_data(length, rows, dtype=torch.float8_e4m3fn):
@@ -50,14 +45,15 @@ def generate_data(length, rows, dtype=torch.float8_e4m3fn):
 
 
 @pytest.mark.parametrize(
-    "length,rows,topk,dtype",
+    "length,rows,topk,dtype,padded_pages",
     [
-        (32, 1, 64, torch.float8_e4m3fn),
-        (16385, 4, 2048, torch.float8_e4m3fn),
-        (256, 2, 64, torch.int8),
+        (32, 1, 64, torch.float8_e4m3fn, False),
+        (16385, 4, 2048, torch.float8_e4m3fn, False),
+        (256, 2, 64, torch.int8, False),
+        (256, 2, 64, torch.float8_e4m3fn, True),
     ],
 )
-def test_ordered_indexer_logical_token_order(length, rows, topk, dtype):
+def test_ordered_indexer_logical_token_order(length, rows, topk, dtype, padded_pages):
     from sgl_kernel_npu.operators.indexer import quant_lightning_indexer_ordered
 
     impl, impl_ref = get_test_impls()
@@ -66,7 +62,18 @@ def test_ordered_indexer_logical_token_order(length, rows, topk, dtype):
     expected = quant_lightning_indexer_ordered(
         *args, **kwargs, topk=topk, impl=impl_ref
     )
-    device_args = tuple(value.npu() for value in args)
+    device_args = [value.npu() for value in args]
+    if padded_pages:
+        for index in (1, 4):
+            data = device_args[index]
+            storage = torch.empty(
+                (data.shape[0] * 2, *data.shape[1:]),
+                device=data.device,
+                dtype=data.dtype,
+            )
+            storage[1::2].copy_(data)
+            device_args[index] = storage[1::2]
+            assert not device_args[index].is_contiguous()
     device_kwargs = {name: value.npu() for name, value in kwargs.items()}
     actual = quant_lightning_indexer_ordered(
         *device_args, **device_kwargs, topk=topk, impl=impl
@@ -92,6 +99,8 @@ def test_ordered_indexer_to_plan():
 
     require_test_impl(quant_lightning_indexer_ordered, "auto")
     require_test_impl(sparse_kv_plan, "auto")
+    if not hasattr(torch.ops.npu, "sgl_sparse_kv_plan"):
+        pytest.skip("wheel was built without Sparse KV Plan")
     length, width = 32, 4
     args, kwargs = generate_data(length, width)
     indices = quant_lightning_indexer_ordered(

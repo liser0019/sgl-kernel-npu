@@ -30,7 +30,7 @@
 
 ```bash
 source /usr/local/Ascend/cann-9.2.1/set_env.sh
-python setup.py --arch-version 3510 --ops sparse_kv_plan --third-party ops_transformer_ordered_indexer -j4
+python setup.py --arch-version 3510 --ops quant_lightning_indexer_ordered,sparse_kv_plan --without-third-party -j4
 python -m pip install --no-deps <wheel-path>
 python -m pytest -q tests/python/operators/indexer/test_quant_lightning_indexer_ordered.py \
   tests/python/operators/mem_cache/test_sparse_kv_plan.py --npu-device 0

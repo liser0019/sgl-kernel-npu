@@ -17,4 +17,4 @@
 
 设备实现面向 Ascend 950 和 CANN 9.2.1。INT8 版使用 FP16 权重和 scale。FP8 E4M3FN 版使用 BF16 权重和 FP32 scale。`impl="torch_native"` 提供同步参考实现。
 
-wheel 打包固定提交的[独立 Ordered Indexer](https://gitcode.com/sparse/ops-transformer/tree/7b434c429b7b5af85246f12040bb3a79531bfa87/attention/quant_lightning_indexer_ordered)。构建和冒烟命令见 [Sparse KV Plan](../mem_cache/sparse_kv_plan.md)。
+构建时从本仓源码编译 Ascend C kernel 和 PyTorch 绑定。源码来源见[实现说明](../../../../../csrc/indexer/quant_lightning_indexer_ordered/README.md)。构建和冒烟命令见 [Sparse KV Plan](../mem_cache/sparse_kv_plan.md)。

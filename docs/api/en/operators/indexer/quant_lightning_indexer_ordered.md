@@ -17,4 +17,4 @@
 
 The device path targets Ascend 950 with CANN 9.2.1. The supported dtype pairs are INT8 query/key with FP16 weights and scales, or FP8 E4M3FN query/key with BF16 weights and FP32 scales. `impl="torch_native"` is a synchronous reference for tests.
 
-The wheel bundles the standalone Ordered Indexer from [pinned ops-transformer source](https://gitcode.com/sparse/ops-transformer/tree/7b434c429b7b5af85246f12040bb3a79531bfa87/attention/quant_lightning_indexer_ordered). Build and smoke-test it together with [Sparse KV Plan](../mem_cache/sparse_kv_plan.md).
+The native build compiles the checked-in Ascend C source and PyTorch adapter into the wheel. Source provenance is recorded in the [implementation README](../../../../../csrc/indexer/quant_lightning_indexer_ordered/README.md). Build and smoke-test it with [Sparse KV Plan](../mem_cache/sparse_kv_plan.md).

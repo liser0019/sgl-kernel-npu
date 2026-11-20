@@ -12,7 +12,7 @@
 | [compressor](operators/attention/compressor.md) | `cann_ops_transformers_cann920`, `ascendc`, `torch_native` |
 | [quant_lightning_indexer_metadata](operators/indexer/quant_lightning_indexer_metadata.md) | `cann_ops_transformers_cann920`, `ops_transformers_cann910`, `torch_native` |
 | [quant_lightning_indexer](operators/indexer/quant_lightning_indexer.md) | `cann_ops_transformers_cann920`, `ops_transformers_cann910`, `torch_native` |
-| [quant_lightning_indexer_ordered](operators/indexer/quant_lightning_indexer_ordered.md) | `ops_transformer` (ARCH35), `torch_native` |
+| [quant_lightning_indexer_ordered](operators/indexer/quant_lightning_indexer_ordered.md) | `ascendc` (ARCH35), `torch_native` |
 | [mixed_quant_sparse_flash_mla_metadata](operators/attention/mixed_quant_sparse_flash_mla_metadata.md) | `cann_ops_transformers_cann920`, `ops_transformers_cann910`, `torch_native` |
 | [sparse_flash_mla_metadata](operators/attention/sparse_flash_mla_metadata.md) | `cann_ops_transformers_cann920`, `ops_transformers_cann910`, `torch_native` |
 | [mixed_quant_sparse_flash_mla](operators/attention/mixed_quant_sparse_flash_mla.md) | `cann_ops_transformers_cann920`, `ops_transformers_cann910`, `ascendc`, `torch_native` |
